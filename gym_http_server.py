@@ -7,6 +7,7 @@ import six
 import argparse
 import sys
 import json
+from ipdb import set_trace as db
 
 
 import logging
@@ -332,11 +333,15 @@ def env_observation_space_info(instance_id):
         - instance_id: a short identifier (such as '3c657dbc')
         for the environment instance
     Returns:
-        - info: a dict containing 'name' (such as 'Discrete'),
+        - info: a dict containing 'name' (such as 'DiscZZrete'),
         and additional dimensional info (such as 'n') which
         varies from space to space
     """
     info = envs.get_observation_space_info(instance_id)
+    for k, v in info.items():
+        if type(v) is list:
+            for i in range(len(v)):
+                v[i] = float(v[i])
     return jsonify(info = info)
 
 @app.route('/v1/envs/<instance_id>/monitor/start/', methods=['POST'])

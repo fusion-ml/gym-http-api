@@ -120,6 +120,7 @@ class Client(object):
         self._post_request(route, None)
 
     def upload(self, training_dir, algorithm_id=None, api_key=None):
+        raise NotImplementedError("upload is hard-deprecated because viraj doesn't know why you would ever want this")
         if not api_key:
             api_key = os.environ.get('OPENAI_GYM_API_KEY')
 
@@ -158,4 +159,4 @@ if __name__ == '__main__':
     init_obs = client.env_reset(instance_id)
     [observation, reward, done, info] = client.env_step(instance_id, 1, True)
     client.env_monitor_close(instance_id)
-    client.upload(training_dir='tmp')
+    # client.upload(training_dir='tmp')
