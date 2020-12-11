@@ -2,10 +2,14 @@ import requests
 import six.moves.urllib.parse as urlparse
 import json
 import os
+import gym
+import numpy as np
+from gym import spaces
 
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 class Client(object):
     """
@@ -20,7 +24,7 @@ class Client(object):
         j = {}
         try:
             j = resp.json()
-        except:
+        except Exception:
             # Most likely json parse failed because of network error, not server error (server
             # sends its errors in json). Don't let parse exception go up, but rather raise default
             # error.
@@ -42,7 +46,7 @@ class Client(object):
         logger.info("GET {}".format(url))
         resp = self.session.get(url)
         return self._parse_server_error_or_raise_for_status(resp)
-        
+
     def env_create(self, env_id):
         route = '/v1/envs/'
         data = {'env_id': env_id}
@@ -134,12 +138,52 @@ class Client(object):
         route = '/v1/shutdown/'
         self._post_request(route, None)
 
+
+class ClientWrapperEnv(gym.Env):
+    '''
+    A wrapper around the client that allows you to treat an environement
+    running on the other side of one of these servers as a gym environment.
+
+    remote_base: a string pointing to the base URL for the api server.
+    env_id: a string that gets passed into gym.make() on the server side to
+    access the desired environment. Will throw an exception if it doesn't
+    exist on server side.
+    '''
+    def __init__(self, remote_base, env_id):
+        self.client = Client(remote_base)
+        self.instance_id = client.env_create(env_id)
+        action_info = client.env_action_space_info(self.instance_id)
+        obs_info = client.env_observation_space_info(self.instance_id)
+        self.action_space = self._process_space_info(action_info)
+        self.observation_space = self._process_space_info(obs_info)
+
+    def reset(self):
+        obs = client.env_reset(self.instance_id)
+        return np.array(obs)
+
+    def step(self, action):
+        obs, rew, done, info = client.env_step(self.instance_id, action)
+        return np.array(obs), rew, done, info
+
+    def _process_space_info(self, info):
+        if info['name'] == 'Discrete':
+            n = info['n']
+            return spaces.Discrete(n)
+        elif info['name'] == 'Box':
+            low = np.array(info['low'])
+            high = np.array(info['high'])
+            return spaces.Box(low, high, dtype=np.float32)
+        else:
+            raise NotImplementedError(f"Info name {info['name']} not supported")
+
+
 class ServerError(Exception):
     def __init__(self, message, status_code=None):
         Exception.__init__(self)
         self.message = message
         if status_code is not None:
             self.status_code = status_code
+
 
 if __name__ == '__main__':
     remote_base = 'http://127.0.0.1:5000'
@@ -160,3 +204,13 @@ if __name__ == '__main__':
     [observation, reward, done, info] = client.env_step(instance_id, 1, True)
     client.env_monitor_close(instance_id)
     # client.upload(training_dir='tmp')
+
+    # test the ClientWrapperEnv
+    env = ClientWrapperEnv(remote_base, env_id)
+
+    # reset
+    obs = env.reset()
+
+    # run a single step
+    obs, rew, done, info = env.step(env.action_space.sample())
+
